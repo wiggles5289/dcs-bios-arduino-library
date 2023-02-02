@@ -1,3 +1,8 @@
+/* PROOF OF CONCEPT AND HARDWARE TEST Written by THE_ONE & Wiggles5289 on DCSFP Discord
+Adds Ethernet functionality to DCSBIOS with Ethernet Library found in default Arduino IDE.
+Only W5100/W5200/W5500 Chipsets supported by library
+*/ 
+
 #ifndef __DCSBIOS_H
 #define __DCSBIOS_H
 
