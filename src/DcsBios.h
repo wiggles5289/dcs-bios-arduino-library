@@ -1,12 +1,7 @@
-/* WIP From The-One and Wiggles5289
-NOTES FROM WIGGLES: Search '-Wiggles5289' for internal writing notes. 
-
-We do need to have a way to maybe broadcast the DCSBIOS PC IP address. Would make it easier for users
-to use this funciton without messing with routers or if they are unable to assign IPs and is dynamic.
-While this is less of a problem if the user is using a switch to localize all the panels to the 
-computer, for WiFi it would be very useful.
-VERSION CONTROL: V0.1 29JAN2023@1610
-*/
+/* PROOF OF CONCEPT AND HARDWARE TEST Written by THE_ONE & Wiggles5289 on DCSFP Discord
+Adds Ethernet functionality to DCSBIOS with Ethernet Library found in default Arduino IDE.
+Only W5100/W5200/W5500 Chipsets supported by library
+*/ 
 
 #ifndef __DCSBIOS_H
 #define __DCSBIOS_H
@@ -24,8 +19,8 @@ VERSION CONTROL: V0.1 29JAN2023@1610
 #include "internal/ExportStreamListener.h"
 #include "internal/PollingInput.h"
 #include "internal/Protocol.h"
-#include "internal/STM32Ethernet.h" //pulled from https://github.com/stm32duino/STM32Ethernet 
-								    //Would be nice to include into DCSBIOS src/internal but idk how to -Wiggles5289
+
+
 
 #ifndef USART0_RX_vect
 #define USART0_RX_vect USART_RX_vect
@@ -35,19 +30,6 @@ VERSION CONTROL: V0.1 29JAN2023@1610
 
 #ifndef PRR0
 #define PRR0 PRR
-#endif
-
-#define DCSBIOS_ETHERNET_ENABLED //FOR EDITOR, REMOVE FOR PUBLISHING. USED TO MAKE DCSBIOS_ETHERNET_ENABLED READABLE ON MY IDE -Wiggles5289
-#define DCSBIOS_LAN //FOR EDITOR, REMOVE FOR PUBLISHING. USED TO MAKE DCSBIOS_LAN READABLE ON MY IDE -Wiggles5289
-
-/*Big Brain idea: Derive IP address from MAC in a particular range. I did note while glancing through
-some random documentation that the range is limited to subnet(IE 239.255.50.1-239.255.50.254). Could lead to 
-conflict if MAC address generation formula limits results to only 255 options.
-
-Also not sure if uCip defined will pass through in sketch will pass to here -Wiggles5289
-*/
-#ifndef uCip //microcontroller board/panel IP address, needs to be unique to each arduino!
-	#define uCip 239,255,50,10
 #endif
 
 namespace DcsBios {
@@ -140,96 +122,32 @@ do not come with their own build system, we are just putting everything into the
 		}
 	}
 #endif
-
-#ifdef DCSBIOS_DEFAULT_SERIAL2
-	namespace DcsBios {
-		ProtocolParser parser;
-		void setup() {
-			Serial2.begin(250000);
-		}
-		void loop() {
-			while (Serial2.available()) {
-				parser.processChar(Serial2.read());
-			}
-			PollingInput::pollInputs();
-			ExportStreamListener::loopAll();			
-		}
-		bool tryToSendDcsBiosMessage(const char* msg, const char* arg) {
-			Serial2.write(msg); Serial2.write(' '); Serial2.write(arg); Serial2.write('\n');
-			DcsBios::PollingInput::setMessageSentOrQueued();
-			return true;
-		}
-	}
+#ifdef DCSBIOS_ETHERNET	
+	#include <Ethernet.h> //Vanilla Ethernet Library from included ArduinoIDE
+						  //Only WIZnet W5100/W5200/W5500-based devices are supported
+	#include <EthernetUDP.h>
+/*		CURRENTLY WORKING OUT KINKS WITH THE FOLLOWING
+	#ifdef macaddr[0] //Only checks if you have one of the 6 MAC address
+	#define byte mac[6] = {macaddr0,macaddr1,macaddr2,macaddr3,macaddr4,macaddr5};
+	#endif
+	#ifndef macaddr[0]
+	#define byte mac[] = {  //NEEDS TO HAVE A FUNCTION TO CHANGE MAC FOR EVERY UPLOAD OR DEFINED IN MAIN   -Wiggles5289
+  		0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED
+		};
+	#endif 
+*/	 byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED};
+	EthernetUDP udp;
+	#ifndef ETHCS
+	const int ETHCS = 10; //Default CS for most shields. Can be defined in sketch.
 #endif
 
-#ifdef DCSBIOS_LAN
-	//Added to have LAN accessibility
-	//#include <WiFi.h>
-	//
-	// Defines:
-	//  #define DCSBIOS_LAN to have Wifi access	and then chose
-	//
-	//		#define DCSBIOS_ESP8266           - for using ESP8266
-	//		#define DCSBIOS_ESP32             - for using ESP32
-	//		#define DCSBIOS_ETHERNET_ENABLED  - Currently only supports Official Arduino Ethernet Library
-	//
-	// I do not like I did this. Should have just had defines left as is for each situation -Wiggles5289
+	IPAddress ipmulti(239,255,50,10); //This needs a main sketch #define for the multicast IP defined in the Protocol.LUA. Change this if you have modified the UDP Socket IP Address. Default is (239,255,50,10)
+	IPAddress remote_IP; //Arduino IP, not constant and assigned by DHCP.
 
-	#ifdef DCSBIOS_ESP8266
-		//ESP8266
-		//#include <WiFi.h> //DOES THIS NEED TO BE ENABLED???? -Wiggles5289
-	    #include <ESP8266WiFi.h>
-		#include "user_interface.h" // Added to avoid losing UDP Multicast Connection
-		#include <WiFiUdp.h>
-		WiFiUDP udp;
-		//WiFiUDP udp_send;
-		IPAddress ipmulti(uCip);
-		IPAddress remote_IP;
-	#endif
-	#ifdef DCSBIOS_ESP32
-		//ESP32
-		#include <WiFi.h>
-		#include <WiFiUdp.h>
-		WiFiUDP udp;
-		//WiFiUDP udp_send;
-		IPAddress ipmulti(uCip);
-		IPAddress remote_IP;
-	#endif
-	#ifdef DCSBIOS_ETHERNET_ENABLED
-		#ifdef DCSBIOS_FOR_STM32 //Checks for if an STM32 is used, requires different library if so
-		#include "STM32Ethernet.h" /* pulled from https://github.com/stm32duino/STM32Ethernet (NEEDS TO BE 
-									  INSTALLED with LwIP Dependency) */
-		else
-		#include <ethernet.h> //Vanilla Ethernet Library from included ArduinoIDE
-							  //Only WIZnet W5100/W5200/W5500-based devices are supported
-		EthernetUDP udp;
-		IPAddress ip(uCip); // Enter an IP address for your controller
-		unsigned int localPort = 8888;      // local port to listen on
-		#endif
-		//STM32Ethernet and Vanilla Arduino Ethernet Library is almost identical in function to the ESP8266/ESP32 WiFi Library
-	#endif
-
-	//ADD LAN
-
-	unsigned int port=5010;
+	unsigned int port=5010; //Change this if you modified the UDP Socket Port Address. Default is (5010)
 	unsigned int dcs_port=7778;
 
-	uint8_t dataUdP[128];
-	/*
-	 * WLAN Configuration
-	*/
-	const char* ssid     = LAN_SSID;
-	const char* password = LAN_PASS;
-	  
-	/*
-	CANNOT FIND SOURCE CODE FROM THIS VERSION, BELOW MAY BE ERRONEOUSLY COMMENTED OUT -Wiggles5289
-	*/
-	// Static IP address
-	// IPAddress local_IP(192, 168, 1, 200);
-	// Gateway IP address
-	// IPAddress gateway(192, 168, 1, 1);
-	// IPAddress subnet(255, 255, 0, 0);
-
+//	uint8_t dataUdP[128]; //dont know what this function is
 
 	namespace DcsBios {
 		
@@ -237,42 +155,26 @@ do not come with their own build system, we are just putting everything into the
 		ProtocolParser parser;
 		
 		void setup() {	
-			
-		  // Init LAN
-		  #if SERIAL_LOG
-			Serial.begin(115200);
-		  #endif
+		  Ethernet.init(ETHCS); //Ethernet Chip SPI CS PIN, if not defined, will default to Pin 10.
+		  Ethernet.begin(mac); //Begins Chip Communication and Ethernet Protocol, gets IP from DHCP.
+		  
+		  /*			-----Quick HW Detection Debug-----
+		    WIP: TODO
+		  if (Ethernet.hardwareStatus() == EthernetNoHardware) {
+    			Serial.println("Ethernet shield was not found.");
+  			} else if (Ethernet.hardwareStatus() == EthernetW5100) {
+    			Serial.println("W5100 Ethernet controller detected.");
+  			} else if (Ethernet.hardwareStatus() == EthernetW5200) {
+    			Serial.println("W5200 Ethernet controller detected.");
+  			} else if (Ethernet.hardwareStatus() == EthernetW5500) {
+    			Serial.println("W5500 Ethernet controller detected.");
+  		   }
+						-----Quick DHCP and IP Check-----
+			TODO
+		  */
+		  udp.begin(mac); //Begins UDP Protocol. IPAddress is not needed for any of the last 3 lines.
+		  udp.beginMulticast(ipmulti,port); //ipmulti is the UDP Multicast adress listed in the protocol.lua file
 
-		  #ifdef DCSBIOS_ESP8266 || DCSBIOS_ESP32
-		  WiFi.mode(WIFI_STA);
-		  //WiFi.config(local_IP, gateway, subnet);
-		  
-		  #ifdef DCSBIOS_ESP8266
-			wifi_set_sleep_type(NONE_SLEEP_T); //LIGHT_SLEEP_T and MODE_SLEEP_T
-		  #endif
-		  
-		  WiFi.begin(ssid, password);
-		  
-		  while (WiFi.status() != WL_CONNECTED){
-			#if SERIAL_LOG  					
-				Serial.print(".");
-			#endif
-			delay(500);
-		  }
-		  #if SERIAL_LOG
-			Serial.print("\nLAN OK - IP:");
-			Serial.println(WiFi.localIP());
-		  #endif
-		  // multicast listener
-		  
-		  #ifdef DCSBIOS_ESP8266
-			udp.beginMulticast(WiFi.localIP(),ipmulti,port);
-		  #endif
-		  
-		  #ifdef DCSBIOS_ESP32
-			udp.beginMulticast(ipmulti,port);
-		  #endif
-		  #endif
 
 		}
 		void loop() {
@@ -347,8 +249,7 @@ do not come with their own build system, we are just putting everything into the
 		
 		
 	  }
-#endif	
-
+#endif
 
 #include "internal/Buttons.h"
 #include "internal/Switches.h"
@@ -364,6 +265,7 @@ do not come with their own build system, we are just putting everything into the
 #include "internal/RotarySwitch.h"
 #include "internal/MatrixSwitches.h"
 #include "internal/DualModeButton.h"
+
 
 namespace DcsBios {
 	template<unsigned int first, unsigned int second>
