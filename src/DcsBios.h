@@ -172,7 +172,7 @@ do not come with their own build system, we are just putting everything into the
 						-----Quick DHCP and IP Check-----
 			TODO
 		  */
-		  udp.begin(mac); //Begins UDP Protocol. IPAddress is not needed for any of the last 3 lines.
+		  udp.begin(dcs_port); //Begins UDP Protocol. IPAddress is not needed for any of the last 3 lines.
 		  udp.beginMulticast(ipmulti,port); //ipmulti is the UDP Multicast adress listed in the protocol.lua file
 
 
